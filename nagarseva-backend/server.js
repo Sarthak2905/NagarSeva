@@ -11,6 +11,7 @@ const complaintRoutes = require('./routes/complaintRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const userRoutes = require('./routes/userRoutes');
+const { ensureCsrfCookie, csrfProtection } = require('./middleware/csrfMiddleware');
 const { notFound, errorHandler } = require('./middleware/errorMiddleware');
 
 dotenv.config();
@@ -29,6 +30,8 @@ app.use(
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
+app.use(ensureCsrfCookie);
+app.use('/api', csrfProtection);
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

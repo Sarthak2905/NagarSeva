@@ -34,6 +34,24 @@ const sanitizeUserResponse = (userDoc) => {
   return fallback;
 };
 
+const normalizeStringField = (value, { lower = false } = {}) => {
+  if (typeof value !== 'string') {
+    return '';
+  }
+
+  const normalized = value.trim();
+  return lower ? normalized.toLowerCase() : normalized;
+};
+
+const logAuthError = (label, error) => {
+  if (process.env.NODE_ENV === 'production') {
+    console.log(`[AUTH] ${label}: internal error`);
+    return;
+  }
+
+  console.log(`[AUTH] ${label}:`, error.message);
+};
+
 const register = async (req, res, next) => {
   try {
     const errors = validationResult(req);
@@ -55,9 +73,16 @@ const register = async (req, res, next) => {
       ward
     } = req.body;
 
-    console.log('[AUTH] Register request received for mobile:', mobile);
+    const safeName = normalizeStringField(name);
+    const safeMobile = normalizeStringField(mobile);
+    const safeEmail = normalizeStringField(email, { lower: true });
+    const safeAadhaar = normalizeStringField(aadhaarNumber);
+    const safeAddress = normalizeStringField(address);
+    const safeWard = normalizeStringField(ward);
 
-    const existingMobile = await User.findOne({ mobile });
+    console.log('[AUTH] Register request received for mobile:', safeMobile);
+
+    const existingMobile = await User.findOne({ mobile: safeMobile });
     if (existingMobile) {
       return res.status(409).json({
         success: false,
@@ -65,8 +90,8 @@ const register = async (req, res, next) => {
       });
     }
 
-    if (email) {
-      const existingEmail = await User.findOne({ email: email.toLowerCase() });
+    if (safeEmail) {
+      const existingEmail = await User.findOne({ email: safeEmail });
       if (existingEmail) {
         return res.status(409).json({
           success: false,
@@ -76,13 +101,13 @@ const register = async (req, res, next) => {
     }
 
     const user = await User.create({
-      name,
-      mobile,
-      email: email ? email.toLowerCase() : undefined,
+      name: safeName,
+      mobile: safeMobile,
+      email: safeEmail || undefined,
       password,
-      aadhaarNumber,
-      address,
-      ward,
+      aadhaarNumber: safeAadhaar || undefined,
+      address: safeAddress || undefined,
+      ward: safeWard || undefined,
       role: 'citizen'
     });
 
@@ -98,7 +123,7 @@ const register = async (req, res, next) => {
       user: sanitizeUserResponse(user)
     });
   } catch (error) {
-    console.log('[AUTH] Registration error:', error.message);
+    logAuthError('Registration error', error);
     next(error);
   }
 };
@@ -115,18 +140,20 @@ const login = async (req, res, next) => {
     }
 
     const { mobile, email, password } = req.body;
+    const safeMobile = normalizeStringField(mobile);
+    const safeEmail = normalizeStringField(email, { lower: true });
 
     console.log('[AUTH] Login request received:', {
-      mobile: mobile || null,
-      email: email || null
+      mobile: safeMobile || null,
+      email: safeEmail || null
     });
 
     const query = {};
 
-    if (email) {
-      query.email = email.toLowerCase();
+    if (safeEmail) {
+      query.email = safeEmail;
     } else {
-      query.mobile = mobile;
+      query.mobile = safeMobile;
     }
 
     const user = await User.findOne(query).select('+password');
@@ -138,7 +165,7 @@ const login = async (req, res, next) => {
       });
     }
 
-    if (email && user.role !== 'admin') {
+    if (safeEmail && user.role !== 'admin') {
       return res.status(403).json({
         success: false,
         message: 'Only admin can login with email.'
@@ -172,7 +199,7 @@ const login = async (req, res, next) => {
       user: sanitizeUserResponse(user)
     });
   } catch (error) {
-    console.log('[AUTH] Login error:', error.message);
+    logAuthError('Login error', error);
     next(error);
   }
 };
@@ -191,7 +218,7 @@ const logout = async (req, res, next) => {
       message: 'Logout successful.'
     });
   } catch (error) {
-    console.log('[AUTH] Logout error:', error.message);
+    logAuthError('Logout error', error);
     next(error);
   }
 };
@@ -212,7 +239,7 @@ const getCurrentUser = async (req, res, next) => {
       user: sanitizeUserResponse(currentUser)
     });
   } catch (error) {
-    console.log('[AUTH] Get current user error:', error.message);
+    logAuthError('Get current user error', error);
     next(error);
   }
 };
@@ -260,7 +287,7 @@ const changePassword = async (req, res, next) => {
       message: 'Password changed successfully.'
     });
   } catch (error) {
-    console.log('[AUTH] Change password error:', error.message);
+    logAuthError('Change password error', error);
     next(error);
   }
 };
